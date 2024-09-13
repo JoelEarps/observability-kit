@@ -9,7 +9,7 @@ use axum::{
 };
 use prometheus_client::{encoding::text::encode, metrics::gauge::Gauge, registry::Registry};
 // Is this the correct wat to do this use crate - or should we do this at mod level
-use crate::prometheus_metric_generator::prometheus_metrics_handler::{AppState, Metrics};
+use crate::prometheus_metric_generator::prometheus_metrics_handler::{RegistryState, Metrics};
 
 // Define custom error here for http service depending on failure?
 async fn root() -> &'static str {
@@ -26,7 +26,7 @@ async fn health_handler() -> (StatusCode, String) {
     (StatusCode::OK, format!("{}", "OK"))
 }
 
-async fn prometheus_metrics(State(state): State<Arc<Mutex<AppState>>>) -> String {
+async fn prometheus_metrics(State(state): State<Arc<Mutex<RegistryState>>>) -> String {
     let current_state = state.lock().await;
     let mut buffer = String::new();
     encode(&mut buffer, &current_state.registry).unwrap();
@@ -39,7 +39,7 @@ async fn prometheus_metrics(State(state): State<Arc<Mutex<AppState>>>) -> String
 // This should be tested with integration tests
 // Create custom error for here
 // State here should be a metric
-pub async fn create_http_server(metrics: Metrics, mut state: AppState) -> Result<(), ()> {
+pub async fn create_http_server(metrics: Metrics, mut state: RegistryState) -> Result<(), ()> {
 
     state
         .registry

@@ -1,6 +1,6 @@
 mod http_server;
 mod prometheus_metric_generator;
-use prometheus_metric_generator::prometheus_metrics_handler::{AppState, Metrics};
+use prometheus_metric_generator::prometheus_metrics_handler::{self, Metrics, PrometheusMetricHandler, RegistryState};
 use prometheus_client::registry::Registry;
 use tokio::task::JoinSet;
 use http_server::http_server::create_http_server;
@@ -10,13 +10,9 @@ async fn main() {
     // Pass in config via from environment?
     println!("Hello, welcome to my library!");
 
-    let  metrics = Metrics{
-        active_connections: Default::default()
-    };
+    // Pass in the metrics you wish to create, this triggers a generator and goes from there?
+    let prometheus_metrics_handler = PrometheusMetricHandler::new();
 
-    let mut state = AppState {
-        registry: Registry::default(),
-    };
     
     // What is Joinset by default and what should it return
     // This could be a function via an attribute? Discuss with IB
@@ -24,7 +20,7 @@ async fn main() {
     // Or leave thread management - option for threaded and none threaded management?
     let mut application_task_set = JoinSet::new();
     application_task_set.spawn({
-        create_http_server(metrics, state)
+        create_http_server(prometheus_metrics_handler.all_metrics, prometheus_metrics_handler.registry_state)
     });
 
     // Custom error for joinset failing
@@ -36,4 +32,3 @@ async fn main() {
 }
 
 // Main functions can test successful termination and running - maybe use mockall here?
-// What custom errors - add to diagram?

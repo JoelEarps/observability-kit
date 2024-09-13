@@ -3,7 +3,7 @@ use prometheus_client::{metrics::gauge::Gauge, registry::Registry};
 // Lets talk through private values
 
 #[derive(Debug)]
-pub struct AppState {
+pub struct RegistryState {
     pub registry: Registry,
 }
 
@@ -23,9 +23,6 @@ pub struct AppState {
 // Decrement by one
 // Decrement by a certain number
 
-
-
-
 #[derive(Debug)]
 pub struct Metrics {
     pub active_connections: Gauge<i64>,
@@ -35,6 +32,27 @@ impl Metrics {
     pub fn inc_active_connections(&self) {
         self.active_connections.inc_by(4);
     }
+}
+
+pub(crate) struct PrometheusMetricHandler {
+    pub all_metrics: Metrics,
+    pub registry_state: RegistryState
+}
+
+impl PrometheusMetricHandler {
+    pub fn new()-> Self {
+        // pass in metrics desired for metrics and the generator can add them to the registry
+        PrometheusMetricHandler {
+            all_metrics: Metrics { active_connections: Default::default() },
+            registry_state: RegistryState { registry: Default::default() }
+        }
+    }
+
+    fn create_mutexes(){
+
+    }
+
+    // Access and lock for thread safety?
 }
 
 #[cfg(test)]

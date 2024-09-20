@@ -1,28 +1,18 @@
 use prometheus_client::{metrics::gauge::Gauge, registry::Registry};
 
 // Lets talk through private values
+// Purpose of this calls
+/*
+1. trigger Generator and assign all vals to the registry 
+2. Create Mutexes for state and registry
+3. Allow access to the registry and perform actions
+*/
+
 
 #[derive(Debug)]
 pub struct RegistryState {
     pub registry: Registry,
 }
-
-// state
-//     .registry
-//     .register("Active Connections", "Active number of connections between all clients and all servers", metrics.active_connections.clone());
-// Pass through all metrics required with the following:
-/* 
-1. Name:
-2. Description
-3. Initial Value
-*/
-
-// API functions to change - find via name - structure name? Imply these functions for primitive type? Atrributes might be better?
-// Increment by one
-// Increment by a number
-// Decrement by one
-// Decrement by a certain number
-
 #[derive(Debug)]
 pub struct Metrics {
     pub active_connections: Gauge<i64>,
@@ -49,10 +39,13 @@ impl PrometheusMetricHandler {
     }
 
     fn create_mutexes(){
-
+        
     }
 
-    // Access and lock for thread safety?
+    // Access and lock for thread safety? Getter for Registry?
+
+    // Setter for metrics?  How should we reference and store variables - Hash Map? Dictionary?
+
 }
 
 #[cfg(test)]

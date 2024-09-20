@@ -1,0 +1,14 @@
+[
+  {
+    "metric_type": "Counter",
+    "title": "M_title",
+    "description": "String",
+    "value": 0
+  },
+  {
+    "metric_type": "Gauge",
+    "title": "M_title",
+    "description": "String",
+    "value": 20
+  }
+]

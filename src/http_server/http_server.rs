@@ -7,7 +7,7 @@ use tokio::net::TcpListener;
 use axum::{
      routing::get, Router
 };
-use prometheus_client::{encoding::text::encode, metrics::gauge::Gauge, registry::Registry};
+use prometheus_client::encoding::text::encode;
 // Is this the correct wat to do this use crate - or should we do this at mod level
 use crate::prometheus_metric_generator::prometheus_metrics_handler::{RegistryState, Metrics};
 
@@ -63,10 +63,6 @@ pub async fn create_http_server(metrics: Metrics, mut state: RegistryState) -> R
       })?;
 
     Ok(())
-}
-
-pub fn say_hello() {
-    println!("Hello from http");
 }
 
 #[cfg(test)]

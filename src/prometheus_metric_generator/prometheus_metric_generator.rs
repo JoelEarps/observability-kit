@@ -1,6 +1,6 @@
 use std::default;
 
-use prometheus_client::metrics::{counter::{Counter, Atomic}, gauge::Gauge};
+use prometheus_client::metrics::{counter::{self, Atomic, Counter}, gauge::Gauge};
 
 /*
 Input = vector of metrics structs
@@ -35,7 +35,6 @@ impl Default for MetricType {
 
 impl MetricType {
     fn new_metric(input: SupportedMetrics) -> MetricType{
-        // DO not need custom Metric Here as you will only be able to pass the enum
         match input {
             SupportedMetrics::counter => {
                 println!("Creating Counter");
@@ -48,21 +47,36 @@ impl MetricType {
         }
     }
 
-    // What have we done here
-    fn inc(&self){
-         if let MetricType::WrappedCounter(counter) = self {
-            counter.inc();  // Assuming `counter` implements the `inc` method
-    }}
-
-    fn get_value(&self) -> u64{
-        if let MetricType::WrappedCounter(counter) = self {
-            println!("Testing testing 123");
-            let test_stuff = counter.get();  // Assuming `counter` implements the `get` method
-            println!("{}", test_stuff);
-            return test_stuff
-    } else {
-        100
+    fn increment_by_one(&self){
+        match self {
+            MetricType::WrappedCounter(counter) => {
+                counter.inc();
+            }
+            // Throw Custom Error here for being unable to cast, better way to do this?
+            MetricType::WrappedGauge(gauge) => {
+                gauge.inc().try_into().unwrap_or(0);
+            }
+        } 
     }
+
+    fn increment_by_custom_value(&self, increment: u64){
+        match self {
+            MetricType::WrappedCounter(counter) => {
+                counter.inc_by(increment);
+            }
+            MetricType::WrappedGauge(gauge) => {
+                // Throw Custom Error here for being unable to cast, better way to do this?
+                gauge.inc_by(increment as i64).try_into().unwrap_or(0);
+            }
+        } 
+    }
+
+    fn get_value(&self) -> u64 {
+        match self {
+            MetricType::WrappedCounter(counter) => counter.get(),
+            // Throw Custom Error here for being unable to cast, better way to do this?
+            MetricType::WrappedGauge(gauge) => gauge.get().try_into().unwrap_or(0)
+        } 
     }
 }
 
@@ -71,14 +85,14 @@ struct Metric {
     metric_type: MetricType,
     title: String,
     description: String,
-    value: i32
+    value: u64
 }
 
 
 trait BasicMetricOperations {
     fn reset_to_zero(&self) -> ();
     fn increment_by_one(&self) -> ();
-    fn increment_by_custom_value(&self, increment: i32) -> ();
+    fn increment_by_custom_value(&self, increment: u64) -> ();
 }
 
 
@@ -91,10 +105,11 @@ impl BasicMetricOperations for Metric {
     // Imply the right functions
     fn increment_by_one(&self) -> (){
         println!("Incrementing {:?} by 1", self.title);
-        self.metric_type.inc();
+        self.metric_type.increment_by_one();
     }
-    fn increment_by_custom_value(&self, increment: i32) -> (){
+    fn increment_by_custom_value(&self, increment: u64) -> (){
         println!("Incrementing {:?} by {}", self.title, increment);
+        self.metric_type.increment_by_custom_value(increment);
     }
 }
 
@@ -136,9 +151,11 @@ mod tests{
             description: ("This is a test Counter").to_string(),
             value : 0
         };
-        println!("Test Value: {} and start value {:?}", test_metric.title, test_metric.metric_type.get_value());
+        assert_eq!(test_metric.metric_type.get_value(), 0);
         test_metric.increment_by_one();
-        println!("Test Value: {} and start value {:?}", test_metric.title, test_metric.metric_type.get_value());
+        assert_eq!(test_metric.metric_type.get_value(), 1);
+        test_metric.increment_by_custom_value(20);
+        assert_eq!(test_metric.metric_type.get_value(), 21);
     }
 
     #[test]

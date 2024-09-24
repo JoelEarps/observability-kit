@@ -1,6 +1,6 @@
 use std::default;
 
-use prometheus_client::metrics::{counter::{self, Atomic, Counter}, gauge::Gauge};
+use prometheus_client::{encoding::EncodeMetric, metrics::{counter::{self, Atomic, Counter}, gauge::Gauge}};
 
 /*
 Input = vector of metrics structs
@@ -78,9 +78,46 @@ impl MetricType {
             MetricType::WrappedGauge(gauge) => gauge.get().try_into().unwrap_or(0)
         } 
     }
+
+    fn reset_to_zero(&self) -> (){
+        match self {
+            MetricType::WrappedGauge(gauge) => {
+                gauge.set(0);
+            }
+            MetricType::WrappedCounter(_) => {
+                // custom error returned here for nothing able to reset a counter
+                println!("Invalid action for this metric type");
+            }
+        }
+    }
+    
+    fn decrement_by_one(&self)-> (){
+        match self {
+            MetricType::WrappedGauge(gauge) => {
+                    gauge.dec();
+            }
+            MetricType::WrappedCounter(_) => {
+                    // custom error returned here for nothing able to reset a counter
+                    println!("Invalid action for this metric type");
+            }
+        }
+    }
+
+    fn decrement_by_custom_value(&self, decrement: i64){
+       match self {
+            MetricType::WrappedGauge(gauge) => {
+                    gauge.dec_by(decrement);
+            }
+            MetricType::WrappedCounter(_) => {
+                    // custom error returned here for nothing able to reset a counter
+                    println!("Invalid action for this metric type");
+            }
+        }
+    }
 }
 
 
+// Can you use derive here instead rather than use the function methods we have created
 struct Metric {
     metric_type: MetricType,
     title: String,
@@ -90,17 +127,13 @@ struct Metric {
 
 
 trait BasicMetricOperations {
-    fn reset_to_zero(&self) -> ();
     fn increment_by_one(&self) -> ();
     fn increment_by_custom_value(&self, increment: u64) -> ();
+    fn get_metric_value(&self) -> u64;
 }
 
 
 impl BasicMetricOperations for Metric {
-    fn reset_to_zero(&self) -> () {
-        println!("Resetting Metric of {:?} to 0", self.title);
-        
-    }
     // When first implementing we could not implement the increment function as this does not allow us to find the increment function as the Metric type doesn't
     // Imply the right functions
     fn increment_by_one(&self) -> (){
@@ -111,11 +144,18 @@ impl BasicMetricOperations for Metric {
         println!("Incrementing {:?} by {}", self.title, increment);
         self.metric_type.increment_by_custom_value(increment);
     }
+
+    fn get_metric_value(&self) -> u64 {
+        println!("Getting value for {}", self.title);
+        self.metric_type.get_value()
+    }
 }
 
 
 trait GaugeFunctions {
     fn decrement_by_one(&self) -> ();
+    fn decrement_by_custom_value(&self, decrement: i64 ) -> ();
+    fn reset_to_zero(&self) -> ();
 }
 
 impl GaugeFunctions for Metric {
@@ -123,6 +163,18 @@ impl GaugeFunctions for Metric {
         // Check this is a not a counter and only allow for non counters
         // Custom Error?
         println!("Decrementing {:?} by 1", self.title);
+        self.metric_type.decrement_by_one();
+    }
+
+    fn reset_to_zero(&self) -> () {
+        println!("Resetting Metric of {:?} to 0", self.title);
+        self.metric_type.reset_to_zero();
+    }
+
+    fn decrement_by_custom_value(&self, decrement: i64 ) -> (){
+        println!("Decrementing {:?} by {}", self.title, decrement);
+        self.metric_type.decrement_by_custom_value(decrement);
+
     }
 }
 
@@ -151,11 +203,14 @@ mod tests{
             description: ("This is a test Counter").to_string(),
             value : 0
         };
-        assert_eq!(test_metric.metric_type.get_value(), 0);
+        assert_eq!(test_metric.get_metric_value(), 0);
         test_metric.increment_by_one();
-        assert_eq!(test_metric.metric_type.get_value(), 1);
+        assert_eq!(test_metric.get_metric_value(), 1);
         test_metric.increment_by_custom_value(20);
-        assert_eq!(test_metric.metric_type.get_value(), 21);
+        assert_eq!(test_metric.get_metric_value(), 21);
+        // Should return a failure message
+        // TODO: Custom Error message for incompatible actions for types
+        test_metric.reset_to_zero();
     }
 
     #[test]
@@ -167,5 +222,17 @@ mod tests{
             value : 0
         };
         println!("Test Value: {:?}", test_metric_gauge.metric_type);
+         assert_eq!(test_metric_gauge.get_metric_value(), 0);
+        test_metric_gauge.increment_by_one();
+        assert_eq!(test_metric_gauge.get_metric_value(), 1);
+        test_metric_gauge.increment_by_custom_value(20);
+        assert_eq!(test_metric_gauge.get_metric_value(), 21);
+        test_metric_gauge.decrement_by_one();
+        assert_eq!(test_metric_gauge.get_metric_value(), 20);
+        test_metric_gauge.decrement_by_custom_value(10);
+        assert_eq!(test_metric_gauge.get_metric_value(), 10);
+        test_metric_gauge.reset_to_zero();
+        assert_eq!(test_metric_gauge.get_metric_value(), 0);
+    
     }
 }

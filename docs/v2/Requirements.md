@@ -6,3 +6,4 @@
 4. Mathmatical support for alternative services
 5. Provide multi threading interface - attribute for returning single thread or joinset?
 6. Phantom types
+7. Supporting various types for prometheus metrics

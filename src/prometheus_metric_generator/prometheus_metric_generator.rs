@@ -51,7 +51,7 @@ impl BasicMetricOperations<u64> for BaseMetric<Counter>{
     }
 }
 
-impl BasicMetricOperations<i64> for BaseMetric<Gauge>{
+impl BasicMetricOperations<i64> for BaseMetric<Gauge> {
     fn new<Gauge>(metric_name: &str, metric_description: &str) -> Self {
          BaseMetric { 
             metric: Default::default(), 
@@ -104,18 +104,19 @@ mod tests{
 
     #[test]
     fn test_metric_type_counter(){
-       let test_metric: BaseMetric<Counter> = BaseMetric::<Counter>::new("test_metric_counter", "A metric for declaring a counter");
+       let test_metric = BaseMetric::new::<Counter>("test_metric_counter", "A metric for declaring a counter");
         assert_eq!(test_metric.get_metric_value(), 0);
         test_metric.increment_by_one();
         assert_eq!(test_metric.get_metric_value(), 1);
-        test_metric.increment_by_custom_value(20);
+        // Have to cast as u64 - is there a more clever way to do this? Custom Errors for Unsupported Types?
+        test_metric.increment_by_custom_value(20 as u64);
         assert_eq!(test_metric.get_metric_value(), 21);
         
     }
 
     #[test]
      fn test_metric_type_gauge(){
-        let test_metric_gauge: BaseMetric<Gauge> = BaseMetric::<Gauge>::new("test_metric_counter", "A metric for declaring a counter");
+        let test_metric_gauge = BaseMetric::new::<Gauge>("test_metric_counter", "A metric for declaring a counter");
         assert_eq!(test_metric_gauge.get_metric_value(), 0);
         test_metric_gauge.increment_by_one();
         assert_eq!(test_metric_gauge.get_metric_value(), 1);

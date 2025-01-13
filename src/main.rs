@@ -1,14 +1,23 @@
 mod http_server;
 mod prometheus_metric_generator;
 use prometheus_metric_generator::prometheus_metrics_handler::{self, Metrics, PrometheusMetricHandler, RegistryState};
-use prometheus_client::registry::Registry;
 use tokio::task::JoinSet;
 use http_server::http_server::create_http_server;
 
 #[tokio::main]
 async fn main() {
     // Pass in config via from environment?
+    // Issues: RW Lock, Event Streaming Architecture
+    // Schema for different metric servers - e.g. generalise or expand to service X.
     println!("Hello, welcome to my library!");
+
+    /* 
+    1. Create Metrics Structure
+    2. Create WebServer that is passed initial metrics
+    3. Access and change metrics - using an interface
+    */
+
+    // What is the SLA/ schema for generating and setting up metrics of your choice?
 
     // Pass in the metrics you wish to create, this triggers a generator and goes from there?
     let prometheus_metrics_handler = PrometheusMetricHandler::new();
@@ -28,7 +37,6 @@ async fn main() {
         task_return.unwrap_err();
     }
 
-    
 }
 
 // Main functions can test successful termination and running - maybe use mockall here?

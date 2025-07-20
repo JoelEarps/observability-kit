@@ -1,8 +1,10 @@
 mod http_server;
 mod prometheus_metric_generator;
-use prometheus_metric_generator::prometheus_metrics_handler::{self, Metrics, PrometheusMetricHandler, RegistryState};
-use tokio::task::JoinSet;
 use http_server::http_server::create_http_server;
+use prometheus_metric_generator::prometheus_metrics_handler::{
+    self, Metrics, PrometheusMetricHandler, RegistryState,
+};
+use tokio::task::JoinSet;
 
 #[tokio::main]
 async fn main() {
@@ -11,7 +13,7 @@ async fn main() {
     // Schema for different metric servers - e.g. generalise or expand to service X.
     println!("Hello, welcome to my library!");
 
-    /* 
+    /*
     1. Create Metrics Structure
     2. Create WebServer that is passed initial metrics
     3. Access and change metrics - using an interface
@@ -22,21 +24,22 @@ async fn main() {
     // Pass in the metrics you wish to create, this triggers a generator and goes from there?
     let prometheus_metrics_handler = PrometheusMetricHandler::new();
 
-    
     // What is Joinset by default and what should it return
     // This could be a function via an attribute? Discuss with IB
     // spawn new thread and create custom error - maybe create a new thread for it to run on automatically as a function?
     // Or leave thread management - option for threaded and none threaded management?
     let mut application_task_set = JoinSet::new();
     application_task_set.spawn({
-        create_http_server(prometheus_metrics_handler.all_metrics, prometheus_metrics_handler.registry_state)
+        create_http_server(
+            prometheus_metrics_handler.all_metrics,
+            prometheus_metrics_handler.registry_state,
+        )
     });
 
     // Custom error for joinset failing
     while let Some(task_return) = application_task_set.join_next().await {
         task_return.unwrap_err();
     }
-
 }
 
 // Main functions can test successful termination and running - maybe use mockall here?

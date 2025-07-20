@@ -1,22 +1,19 @@
-
 use axum::extract::State;
-use std::sync::Arc;
-use tokio::sync::Mutex;
+use axum::{routing::get, Router};
 use hyper::StatusCode;
-use tokio::net::TcpListener;
-use axum::{
-     routing::get, Router
-};
 use prometheus_client::encoding::text::encode;
+use std::sync::Arc;
+use tokio::net::TcpListener;
+use tokio::sync::Mutex;
 // Is this the correct wat to do this use crate - or should we do this at mod level
-use crate::prometheus_metric_generator::prometheus_metrics_handler::{RegistryState, Metrics};
+use crate::prometheus_metric_generator::prometheus_metrics_handler::{Metrics, RegistryState};
 
 // Define custom error here for http service depending on failure?
 async fn root() -> &'static str {
     "Hello, World!"
 }
 
-async fn ready_check(State(metrics): State<Arc<Mutex<Metrics>>>)-> (StatusCode, String) {
+async fn ready_check(State(metrics): State<Arc<Mutex<Metrics>>>) -> (StatusCode, String) {
     metrics.lock().await.inc_active_connections(1);
     (StatusCode::OK, format!("{}", "OK"))
 }
@@ -35,32 +32,33 @@ async fn prometheus_metrics(State(state): State<Arc<Mutex<RegistryState>>>) -> S
 
 // potential constructor for management of monitoring threading - maybe return a JoinSet for others
 
-
 // This should be tested with integration tests
 // Create custom error for here
 // State here should be a metric
 pub async fn create_http_server(metrics: Metrics, mut state: RegistryState) -> Result<(), ()> {
-
-    state
-        .registry
-        .register("Active Connections", "Active number of connections between all clients and all servers", metrics.active_connections.clone());
+    state.registry.register(
+        "Active Connections",
+        "Active number of connections between all clients and all servers",
+        metrics.active_connections.clone(),
+    );
     let metrics = Arc::new(Mutex::new(metrics));
     let state = Arc::new(Mutex::new(state));
 
-
     let app = Router::new()
         .route("/", get(root))
-        .route("/ready", get(ready_check)).with_state(metrics)
-        .route("/health", 
-        get(health_handler)).route("/metrics", get(prometheus_metrics)).with_state(state);
+        .route("/ready", get(ready_check))
+        .with_state(metrics)
+        .route("/health", get(health_handler))
+        .route("/metrics", get(prometheus_metrics))
+        .with_state(state);
 
-    let listener = TcpListener::bind("localhost:3000").await.map_err(|error| {
-        return ()
-      })?;
-      
-    let _server_result = axum::serve(listener, app).await.map_err(|error| {
-        return ()
-      })?;
+    let listener = TcpListener::bind("localhost:3000")
+        .await
+        .map_err(|error| return ())?;
+
+    let _server_result = axum::serve(listener, app)
+        .await
+        .map_err(|error| return ())?;
 
     Ok(())
 }
@@ -71,14 +69,14 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_hello_world(){
+    async fn test_hello_world() {
         assert_eq!(root().await, "Hello, World!");
     }
 
     #[tokio::test]
-    async fn test_health_handler(){
+    async fn test_health_handler() {
         let metrics = Metrics {
-        active_connections: Default::default()
+            active_connections: Default::default(),
         };
         let metrics = Arc::new(Mutex::new(metrics));
         let cloned_metrics = metrics.clone();
@@ -88,7 +86,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_ready_handler(){
-        assert_eq!(health_handler().await, (StatusCode::OK, format!("{}", "OK")));
+    async fn test_ready_handler() {
+        assert_eq!(
+            health_handler().await,
+            (StatusCode::OK, format!("{}", "OK"))
+        );
     }
 }

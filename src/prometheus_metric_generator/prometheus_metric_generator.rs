@@ -1,78 +1,134 @@
-use std::default;
+use std::{default, fmt::Display, str::FromStr};
 
-use prometheus_client::{encoding::EncodeMetric, metrics::{counter::{self, Atomic, Counter}, gauge::Gauge}};
-struct BaseMetric<T> {
-    metric: T,
+use prometheus_client::metrics::{
+    counter::{self, Counter},
+    gauge::Gauge,
+    MetricType,
+};
+
+// Aims for today:
+/*
+1. Create a wrapper around the Metric Struct */
+
+// Create a PrometheusMetric struct that is of type either Counter or Gauge
+// Turns out there is an enum we can use
+// struct PrometheusMetric {
+//     metric: MetricType,
+//     title: String,
+//     description: String,
+//     initial_value: String
+// }
+
+// Use traits here to create our own trait that can perform the conversion, or we can say that T has to implement into u64
+// We want a way to remove all these impl functions for a certain type
+// It needs to implement some basic math functions
+// Metrics are deserialised from a config file, turn this off an on with lazy static with features maybe for crate?
+
+// There is a trait called atomic operations, which means we cna trait bound the methods
+// use the type and precision with deserialisation to figure out what to cast for
+//
+struct BaseMetric<A> {
+    metric: A,
     title: String,
     description: String,
 }
 
-trait BasicMetricOperations<U> {
-    fn new<T>(metric_name: &str, metric_description: &str) -> Self;
-    fn increment_by_one(&self);
-    fn increment_by_custom_value(&self, increment: U);
-    fn get_metric_value(&self) -> U;
+/// Associates metric types with their value types
+pub trait MetricValueType {
+    type Value;
 }
 
-trait GaugeMetricFunctionality<U> : BasicMetricOperations <U> {
+impl MetricValueType for Counter<u64> {
+    type Value = u64;
+}
+
+impl MetricValueType for Gauge<i64> {
+    type Value = i64;
+}
+
+/// Make notes on,
+pub trait BasicMetricOperations<A>
+where
+    A: MetricValueType,
+{
+    fn new(metric_name: &str, metric_description: &str, metric: A) -> Self;
+    fn increment_by_one(&self);
+    fn increment_by_custom_value(&self, increment: <A as MetricValueType>::Value);
+    fn get_metric_value(&self) -> <A as MetricValueType>::Value;
+}
+
+/// Counter Functionality
+impl BasicMetricOperations<Counter<u64>> for BaseMetric<Counter<u64>> {
+    fn new(metric_name: &str, metric_description: &str, metric: Counter<u64>) -> Self {
+        BaseMetric {
+            metric,
+            title: metric_name.to_string(),
+            description: metric_description.to_string(),
+        }
+    }
+
+    fn increment_by_one(&self) {
+        self.metric.inc();
+    }
+
+    fn increment_by_custom_value(&self, increment: u64) {
+        self.metric.inc_by(increment);
+    }
+
+    fn get_metric_value(&self) -> u64 {
+        self.metric.get()
+    }
+}
+
+// Gauge Functionality
+
+/// What does this mean?
+trait GaugeMetricFunctionality<U> : BasicMetricOperations <U> where
+    U: MetricValueType,
+    {
     fn reset_to_zero(&self);
     fn decrement_by_one(&self);
-    fn decrement_by_custom_value(&self, increment: U);
+    fn decrement_by_custom_value(&self, decrement: <U as MetricValueType>::Value);
+    fn set_to_custom_value(&self, desired_value: <U as MetricValueType>::Value);
 }
 
-impl BasicMetricOperations<u64> for BaseMetric<Counter>{
-    fn new<Counter>(metric_name: &str, metric_description: &str) -> Self {
-         BaseMetric { 
-            metric: Default::default(), 
-            title: metric_name.to_owned(), 
-            description: metric_description.to_owned()
+impl BasicMetricOperations<Gauge<i64>> for BaseMetric<Gauge<i64>> {
+    fn new(metric_name: &str, metric_description: &str, metric: Gauge<i64>) -> Self {
+        BaseMetric {
+            metric,
+            title: metric_name.to_string(),
+            description: metric_description.to_string(),
         }
     }
-    fn increment_by_one(&self){
-        println!("Do nothing for now 1");
+
+    fn increment_by_one(&self) {
         self.metric.inc();
     }
-    fn increment_by_custom_value(&self, increment: u64){
-        println!("Do nothing for now 2 with increment {}", increment);
+
+    fn increment_by_custom_value(&self, increment: i64) {
         self.metric.inc_by(increment);
     }
-    fn get_metric_value(&self) -> u64{
-        println!("Do nothing for now 3");
+
+    fn get_metric_value(&self) -> i64 {
         self.metric.get()
     }
 }
 
-impl BasicMetricOperations<i64> for BaseMetric<Gauge> {
-    fn new<Gauge>(metric_name: &str, metric_description: &str) -> Self {
-         BaseMetric { 
-            metric: Default::default(), 
-            title: metric_name.to_owned(), 
-            description: metric_description.to_owned()
-        }
-    }
-    fn increment_by_one(&self){
-        println!("Do nothing for now 1");
-        self.metric.inc();
-    }
-    fn increment_by_custom_value(&self, increment: i64){
-        println!("Do nothing for now 2 with increment {}", increment);
-        self.metric.inc_by(increment);
-    }
-    fn get_metric_value(&self) -> i64{
-        println!("Do nothing for now 3");
-        self.metric.get()
-    }
-}
-
-impl GaugeMetricFunctionality<i64> for BaseMetric<Gauge>{
-    fn reset_to_zero(&self){
+impl GaugeMetricFunctionality<Gauge<i64>> for BaseMetric<Gauge<i64>> {
+    fn reset_to_zero(&self) {
         self.metric.set(0);
     }
-    fn decrement_by_one(&self){
+
+    fn decrement_by_one(&self) {
         self.metric.dec();
     }
-    fn decrement_by_custom_value(&self, increment: i64){
-        self.metric.dec_by(increment);
+
+    fn decrement_by_custom_value(&self, decrement: i64) {
+        self.metric.dec_by(decrement);
+    }
+
+    fn set_to_custom_value(&self, desired_value: i64) {
+        self.metric.set(desired_value);
     }
 }
 
@@ -82,7 +138,8 @@ mod tests{
 
     #[test]
     fn test_metric_type_counter(){
-       let test_metric = BaseMetric::new::<Counter>("test_metric_counter", "A metric for declaring a counter");
+        let test_counter = Counter::default();
+       let test_metric = BaseMetric::new("test_metric_counter", "A metric for declaring a counter", test_counter);
         assert_eq!(test_metric.get_metric_value(), 0);
         test_metric.increment_by_one();
         assert_eq!(test_metric.get_metric_value(), 1);
@@ -92,7 +149,8 @@ mod tests{
 
     #[test]
      fn test_metric_type_gauge(){
-        let test_metric_gauge = BaseMetric::new::<Gauge>("test_metric_counter", "A metric for declaring a counter");
+        let test_gauge = Gauge::default();
+        let test_metric_gauge = BaseMetric::new("test_metric_counter", "A metric for declaring a counter", test_gauge);
         assert_eq!(test_metric_gauge.get_metric_value(), 0);
         test_metric_gauge.increment_by_one();
         assert_eq!(test_metric_gauge.get_metric_value(), 1);
@@ -104,5 +162,7 @@ mod tests{
         assert_eq!(test_metric_gauge.get_metric_value(), 10);
         test_metric_gauge.reset_to_zero();
         assert_eq!(test_metric_gauge.get_metric_value(), 0);
+        test_metric_gauge.set_to_custom_value(500);
+        assert_eq!(test_metric_gauge.get_metric_value(), 500);
     }
 }

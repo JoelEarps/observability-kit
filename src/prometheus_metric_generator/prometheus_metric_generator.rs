@@ -34,10 +34,21 @@ struct BaseMetric<A> {
 }
 
 /// Associates metric types with their value types
+/// As we cannot return multiple types from a function, rust does not support it
+/// We have created an associated type - static the type returns for each implementer for the trait
+/// Currently we support Counter and Gauges - the two most common types which require u64 and i64 respectively
 pub trait MetricValueType {
     type Value;
 }
 
+/// The implementation for the relevant supported metric types
+/// This tells the compiler:
+
+// "For a Counter<u64>, its value type is u64."
+
+// "For a Gauge<i64>, its value type is i64."
+
+// So now, anywhere in your code, if you're working with something that implements MetricValueType, you can get its value type like this:
 impl MetricValueType for Counter<u64> {
     type Value = u64;
 }
@@ -46,7 +57,8 @@ impl MetricValueType for Gauge<i64> {
     type Value = i64;
 }
 
-/// Make notes on,
+/// The where trait is bounding the generic type A to must having implemented the MetricValueType trait
+/// ` <A as MetricValueType>::Value` That’s how you reference the associated type on the trait MetricValueType for the type A.
 pub trait BasicMetricOperations<A>
 where
     A: MetricValueType,

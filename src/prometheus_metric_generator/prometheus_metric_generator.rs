@@ -6,24 +6,6 @@ use prometheus_client::metrics::{
     MetricType,
 };
 
-// Aims for today:
-/*
-1. Create a wrapper around the Metric Struct */
-
-// Create a PrometheusMetric struct that is of type either Counter or Gauge
-// Turns out there is an enum we can use
-// struct PrometheusMetric {
-//     metric: MetricType,
-//     title: String,
-//     description: String,
-//     initial_value: String
-// }
-
-// Use traits here to create our own trait that can perform the conversion, or we can say that T has to implement into u64
-// We want a way to remove all these impl functions for a certain type
-// It needs to implement some basic math functions
-// Metrics are deserialised from a config file, turn this off an on with lazy static with features maybe for crate?
-
 // There is a trait called atomic operations, which means we cna trait bound the methods
 // use the type and precision with deserialisation to figure out what to cast for
 //
@@ -43,11 +25,8 @@ pub trait MetricValueType {
 
 /// The implementation for the relevant supported metric types
 /// This tells the compiler:
-
 // "For a Counter<u64>, its value type is u64."
-
 // "For a Gauge<i64>, its value type is i64."
-
 // So now, anywhere in your code, if you're working with something that implements MetricValueType, you can get its value type like this:
 impl MetricValueType for Counter<u64> {
     type Value = u64;
@@ -56,7 +35,6 @@ impl MetricValueType for Counter<u64> {
 impl MetricValueType for Gauge<i64> {
     type Value = i64;
 }
-
 /// The where trait is bounding the generic type A to must having implemented the MetricValueType trait
 /// ` <A as MetricValueType>::Value` That’s how you reference the associated type on the trait MetricValueType for the type A.
 pub trait BasicMetricOperations<A>
@@ -95,9 +73,10 @@ impl BasicMetricOperations<Counter<u64>> for BaseMetric<Counter<u64>> {
 // Gauge Functionality
 
 /// What does this mean?
-trait GaugeMetricFunctionality<U> : BasicMetricOperations <U> where
+trait GaugeMetricFunctionality<U>: BasicMetricOperations<U>
+where
     U: MetricValueType,
-    {
+{
     fn reset_to_zero(&self);
     fn decrement_by_one(&self);
     fn decrement_by_custom_value(&self, decrement: <U as MetricValueType>::Value);
@@ -145,13 +124,17 @@ impl GaugeMetricFunctionality<Gauge<i64>> for BaseMetric<Gauge<i64>> {
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
 
     #[test]
-    fn test_metric_type_counter(){
+    fn test_metric_type_counter() {
         let test_counter = Counter::default();
-       let test_metric = BaseMetric::new("test_metric_counter", "A metric for declaring a counter", test_counter);
+        let test_metric = BaseMetric::new(
+            "test_metric_counter",
+            "A metric for declaring a counter",
+            test_counter,
+        );
         assert_eq!(test_metric.get_metric_value(), 0);
         test_metric.increment_by_one();
         assert_eq!(test_metric.get_metric_value(), 1);
@@ -160,9 +143,13 @@ mod tests{
     }
 
     #[test]
-     fn test_metric_type_gauge(){
+    fn test_metric_type_gauge() {
         let test_gauge = Gauge::default();
-        let test_metric_gauge = BaseMetric::new("test_metric_counter", "A metric for declaring a counter", test_gauge);
+        let test_metric_gauge = BaseMetric::new(
+            "test_metric_counter",
+            "A metric for declaring a counter",
+            test_gauge,
+        );
         assert_eq!(test_metric_gauge.get_metric_value(), 0);
         test_metric_gauge.increment_by_one();
         assert_eq!(test_metric_gauge.get_metric_value(), 1);

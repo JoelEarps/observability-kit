@@ -7,19 +7,37 @@
 //!
 //! ```ignore
 //! use observability_kit::http::standalone::StandaloneServer;
+//! use observability_kit::backends::prometheus::PrometheusBackend;
 //!
 //! #[tokio::main]
-//! async fn main() {
-//!     let server = StandaloneServer::builder()
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let server = StandaloneServer::<PrometheusBackend>::builder()
 //!         .port(9090)
 //!         .build();
 //!
-//!     server.run().await.unwrap();
+//!     // Create metrics
+//!     let requests = server.registry().counter("http_requests_total", "Total requests")?;
+//!     requests.inc();
+//!
+//!     // Run the server
+//!     server.run().await?;
+//!     Ok(())
 //! }
 //! ```
 
-use axum::{routing::get, Router};
+use axum::{
+    extract::State,
+    http::{header, StatusCode},
+    response::IntoResponse,
+    routing::get,
+    Router,
+};
+use std::sync::Arc;
 use tokio::net::TcpListener;
+use tokio::sync::RwLock;
+
+use crate::core::registry::{MetricBackend, ObservabilityRegistry};
+use crate::core::renderer::MetricsRenderer;
 
 use super::health::{default_health_check, default_readiness_check};
 
@@ -51,12 +69,21 @@ impl Default for ServerConfig {
 }
 
 /// Builder for creating a standalone server.
-#[derive(Default)]
-pub struct StandaloneServerBuilder {
+pub struct StandaloneServerBuilder<B: MetricBackend> {
     config: ServerConfig,
+    _marker: std::marker::PhantomData<B>,
 }
 
-impl StandaloneServerBuilder {
+impl<B: MetricBackend> Default for StandaloneServerBuilder<B> {
+    fn default() -> Self {
+        Self {
+            config: ServerConfig::default(),
+            _marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<B: MetricBackend> StandaloneServerBuilder<B> {
     /// Create a new builder with default configuration.
     pub fn new() -> Self {
         Self::default()
@@ -93,21 +120,57 @@ impl StandaloneServerBuilder {
     }
 
     /// Build the standalone server.
-    pub fn build(self) -> StandaloneServer {
+    pub fn build(self) -> StandaloneServer<B> {
         StandaloneServer {
             config: self.config,
+            registry: Arc::new(RwLock::new(ObservabilityRegistry::<B>::new())),
+        }
+    }
+}
+
+/// Shared state for the HTTP handlers.
+struct AppState<B: MetricBackend> {
+    registry: Arc<RwLock<ObservabilityRegistry<B>>>,
+}
+
+impl<B: MetricBackend> Clone for AppState<B> {
+    fn clone(&self) -> Self {
+        Self {
+            registry: Arc::clone(&self.registry),
         }
     }
 }
 
 /// A standalone HTTP server for exposing metrics.
-pub struct StandaloneServer {
+///
+/// The server is generic over the metric backend, allowing you to use
+/// Prometheus, OpenTelemetry, or any other supported backend.
+///
+/// # Example
+/// ```ignore
+/// use observability_kit::http::standalone::StandaloneServer;
+/// use observability_kit::backends::prometheus::PrometheusBackend;
+///
+/// let server = StandaloneServer::<PrometheusBackend>::builder()
+///     .port(9090)
+///     .build();
+///
+/// // Get a handle to create metrics
+/// let registry = server.registry();
+/// let counter = registry.write().await.counter("my_counter", "A counter")?;
+/// counter.inc();
+///
+/// // Run the server
+/// server.run().await?;
+/// ```
+pub struct StandaloneServer<B: MetricBackend> {
     config: ServerConfig,
+    registry: Arc<RwLock<ObservabilityRegistry<B>>>,
 }
 
-impl StandaloneServer {
+impl<B: MetricBackend> StandaloneServer<B> {
     /// Create a new builder for the standalone server.
-    pub fn builder() -> StandaloneServerBuilder {
+    pub fn builder() -> StandaloneServerBuilder<B> {
         StandaloneServerBuilder::new()
     }
 
@@ -116,9 +179,30 @@ impl StandaloneServer {
         &self.config
     }
 
+    /// Get a handle to the metrics registry.
+    ///
+    /// Use this to create metrics that will be exposed on the `/metrics` endpoint.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let registry = server.registry();
+    /// let counter = registry.write().await.counter("requests_total", "Total requests")?;
+    /// counter.inc();
+    /// ```
+    pub fn registry(&self) -> Arc<RwLock<ObservabilityRegistry<B>>> {
+        Arc::clone(&self.registry)
+    }
+
     /// Run the server (blocking).
-    pub async fn run(&self) -> Result<(), ServerError> {
-        let app = self.create_router();
+    pub async fn run(&self) -> Result<(), ServerError>
+    where
+        B::Registry: MetricsRenderer<Error = std::fmt::Error>,
+    {
+        let state = AppState {
+            registry: Arc::clone(&self.registry),
+        };
+
+        let app = self.create_router(state);
         let addr = format!("{}:{}", self.config.host, self.config.port);
 
         let listener = TcpListener::bind(&addr)
@@ -138,11 +222,15 @@ impl StandaloneServer {
     }
 
     /// Create the router with all endpoints.
-    fn create_router(&self) -> Router {
+    fn create_router(&self, state: AppState<B>) -> Router
+    where
+        B::Registry: MetricsRenderer<Error = std::fmt::Error>,
+    {
         Router::new()
-            .route(&self.config.metrics_path, get(metrics_handler))
+            .route(&self.config.metrics_path, get(metrics_handler::<B>))
             .route(&self.config.health_path, get(health_handler))
             .route(&self.config.ready_path, get(ready_handler))
+            .with_state(state)
     }
 }
 
@@ -159,22 +247,41 @@ pub enum ServerError {
 // HTTP Handlers
 // ═══════════════════════════════════════════════════════════════════════════
 
-async fn metrics_handler() -> &'static str {
-    // TODO: Wire up to actual registry encoding
-    "# No metrics registered yet\n"
+async fn metrics_handler<B: MetricBackend>(
+    State(state): State<AppState<B>>,
+) -> impl IntoResponse
+where
+    B::Registry: MetricsRenderer<Error = std::fmt::Error>,
+{
+    let registry = state.registry.read().await;
+    
+    match registry.render() {
+        Ok(rendered) => {
+            let content_type = rendered.content_type.clone();
+            (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, content_type)],
+                rendered.into_bytes(),
+            )
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to render metrics: {}", e),
+        )
+            .into_response(),
+    }
 }
 
-async fn health_handler() -> (axum::http::StatusCode, &'static str) {
+async fn health_handler() -> (StatusCode, &'static str) {
     let status = default_health_check();
-    let code = axum::http::StatusCode::from_u16(status.status_code())
-        .unwrap_or(axum::http::StatusCode::OK);
+    let code = StatusCode::from_u16(status.status_code()).unwrap_or(StatusCode::OK);
     (code, "OK")
 }
 
-async fn ready_handler() -> (axum::http::StatusCode, &'static str) {
+async fn ready_handler() -> (StatusCode, &'static str) {
     let status = default_readiness_check();
-    let code = axum::http::StatusCode::from_u16(status.status_code())
-        .unwrap_or(axum::http::StatusCode::OK);
+    let code = StatusCode::from_u16(status.status_code()).unwrap_or(StatusCode::OK);
     (code, "OK")
 }
 
@@ -192,9 +299,12 @@ mod tests {
         assert_eq!(config.ready_path, "/ready");
     }
 
+    #[cfg(feature = "prometheus")]
     #[test]
     fn test_builder() {
-        let server = StandaloneServer::builder()
+        use crate::backends::prometheus::PrometheusBackend;
+
+        let server = StandaloneServer::<PrometheusBackend>::builder()
             .port(3000)
             .host("127.0.0.1")
             .metrics_path("/prometheus")
@@ -205,4 +315,3 @@ mod tests {
         assert_eq!(server.config().metrics_path, "/prometheus");
     }
 }
-

@@ -5,7 +5,7 @@
 #[cfg(feature = "standalone")]
 mod http_tests {
     use observability_kit::http::health::{HealthStatus, ReadinessStatus};
-    use observability_kit::http::standalone::{ServerConfig, StandaloneServer};
+    use observability_kit::http::standalone::ServerConfig;
 
     #[test]
     fn test_server_config_defaults() {
@@ -18,9 +18,13 @@ mod http_tests {
         assert_eq!(config.ready_path, "/ready");
     }
 
+    #[cfg(feature = "prometheus")]
     #[test]
     fn test_server_builder_customization() {
-        let server = StandaloneServer::builder()
+        use observability_kit::backends::prometheus::PrometheusBackend;
+        use observability_kit::http::standalone::StandaloneServer;
+
+        let server = StandaloneServer::<PrometheusBackend>::builder()
             .port(3000)
             .host("127.0.0.1")
             .metrics_path("/prometheus/metrics")
@@ -68,10 +72,13 @@ mod http_tests {
 
     // Integration test that actually starts the server and makes HTTP requests
     // Note: This test requires full network access and may not work in sandboxed environments.
-    // Run with: cargo test --features mock -- --ignored
+    // Run with: cargo test --features "prometheus mock" -- --ignored
+    #[cfg(feature = "prometheus")]
     #[tokio::test]
     #[ignore = "Requires network access - run manually with --ignored flag"]
     async fn test_server_endpoints_integration() {
+        use observability_kit::backends::prometheus::PrometheusBackend;
+        use observability_kit::http::standalone::StandaloneServer;
         use std::net::TcpListener;
         use std::time::Duration;
         use tokio::time::timeout;
@@ -81,7 +88,7 @@ mod http_tests {
         let port = listener.local_addr().unwrap().port();
         drop(listener); // Release the port
 
-        let server = StandaloneServer::builder()
+        let server = StandaloneServer::<PrometheusBackend>::builder()
             .port(port)
             .host("127.0.0.1")
             .build();
@@ -136,4 +143,3 @@ mod http_tests {
         server_handle.abort();
     }
 }
-

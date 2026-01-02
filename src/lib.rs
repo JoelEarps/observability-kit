@@ -81,7 +81,7 @@ pub mod prelude {
     #[cfg(feature = "prometheus")]
     pub use crate::backends::prometheus::{
         counter, gauge, histogram, histogram_for_bytes, histogram_for_latency, histogram_with_buckets,
-        PrometheusCounter, PrometheusGauge, PrometheusHistogram,
+        PrometheusBackend, PrometheusCounter, PrometheusGauge, PrometheusHistogram, PrometheusRegistry,
         DEFAULT_BUCKETS, DEFAULT_LATENCY_BUCKETS, DEFAULT_SIZE_BUCKETS,
     };
 

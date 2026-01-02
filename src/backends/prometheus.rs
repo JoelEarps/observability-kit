@@ -3,7 +3,9 @@
 //! This module implements the core metric traits for the `prometheus-client` crate.
 
 use crate::core::metrics::{CounterTrait, GaugeTrait, HistogramTrait, Metric};
+use crate::core::registry::{MetricBackend, ObservabilityRegistry};
 use prometheus_client::metrics::{counter::Counter, gauge::Gauge, histogram::Histogram};
+use prometheus_client::registry::Registry;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CounterTrait implementation for prometheus-client Counter
@@ -64,8 +66,90 @@ impl HistogramTrait for Histogram {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// MetricBackend implementation for Prometheus
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Error type for Prometheus registration operations.
+#[derive(Debug, thiserror::Error)]
+pub enum PrometheusError {
+    #[error("Failed to register metric: {0}")]
+    RegistrationError(String),
+}
+
+/// Prometheus backend marker type.
+///
+/// Use this with `ObservabilityRegistry<PrometheusBackend>` to create
+/// a registry backed by prometheus-client.
+pub struct PrometheusBackend;
+
+impl MetricBackend for PrometheusBackend {
+    type Registry = Registry;
+    type Counter = Counter<u64>;
+    type Gauge = Gauge<i64>;
+    type Histogram = Histogram;
+    type Error = PrometheusError;
+    
+    fn create_registry() -> Self::Registry {
+        Registry::default()
+    }
+    
+    fn register_counter(
+        registry: &mut Self::Registry,
+        name: &str,
+        help: &str,
+    ) -> Result<Self::Counter, Self::Error> {
+        let counter = Counter::default();
+        registry.register(name, help, counter.clone());
+        Ok(counter)
+    }
+    
+    fn register_gauge(
+        registry: &mut Self::Registry,
+        name: &str,
+        help: &str,
+    ) -> Result<Self::Gauge, Self::Error> {
+        let gauge = Gauge::default();
+        registry.register(name, help, gauge.clone());
+        Ok(gauge)
+    }
+    
+    fn register_histogram(
+        registry: &mut Self::Registry,
+        name: &str,
+        help: &str,
+        buckets: Vec<f64>,
+    ) -> Result<Self::Histogram, Self::Error> {
+        let histogram = Histogram::new(buckets.into_iter());
+        registry.register(name, help, histogram.clone());
+        Ok(histogram)
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Type aliases for convenience
 // ═══════════════════════════════════════════════════════════════════════════
+
+/// A complete Prometheus metrics registry.
+///
+/// This is the recommended way to use Prometheus metrics with this library.
+///
+/// # Example
+/// ```ignore
+/// use observability_kit::backends::prometheus::PrometheusRegistry;
+///
+/// let mut registry = PrometheusRegistry::new();
+///
+/// let requests = registry.counter("http_requests_total", "Total requests")?;
+/// let connections = registry.gauge("active_connections", "Active connections")?;
+///
+/// requests.inc();
+/// connections.set(42);
+///
+/// // Render for /metrics endpoint
+/// let output = registry.render()?;
+/// println!("{}", output.as_str()?);
+/// ```
+pub type PrometheusRegistry = ObservabilityRegistry<PrometheusBackend>;
 
 /// A Prometheus counter metric with metadata.
 pub type PrometheusCounter = Metric<Counter<u64>>;
@@ -253,6 +337,52 @@ mod tests {
         response_size.observe(5_000_000.0); // 5 MB
 
         assert_eq!(response_size.name(), "http_response_size_bytes");
+    }
+
+    #[test]
+    fn test_prometheus_registry_creates_and_registers_metrics() {
+        let mut registry = PrometheusRegistry::new();
+
+        // Create metrics via the registry
+        let requests = registry.counter("http_requests_total", "Total HTTP requests").unwrap();
+        let connections = registry.gauge("active_connections", "Active connections").unwrap();
+        let latency = registry.histogram("request_duration_seconds", "Request latency").unwrap();
+
+        // Use the metrics
+        requests.inc();
+        requests.inc_by(5);
+        connections.set(42);
+        latency.observe(0.042);
+        latency.observe(0.156);
+
+        // Verify values
+        assert_eq!(requests.get_counter(), 6);
+        assert_eq!(connections.get_gauge(), 42);
+    }
+
+    #[test]
+    fn test_prometheus_registry_renders_metrics() {
+        let mut registry = PrometheusRegistry::new();
+
+        let requests = registry.counter("test_requests_total", "Test counter").unwrap();
+        requests.inc();
+        requests.inc_by(10);
+
+        let gauge = registry.gauge("test_gauge", "Test gauge").unwrap();
+        gauge.set(42);
+
+        // Render the metrics
+        let output = registry.render().unwrap();
+        let text = output.as_str().unwrap();
+
+        // Verify the output contains our metrics
+        assert!(text.contains("test_requests_total"));
+        assert!(text.contains("11")); // 1 + 10
+        assert!(text.contains("test_gauge"));
+        assert!(text.contains("42"));
+        
+        // Verify content type
+        assert!(output.content_type.contains("text/plain"));
     }
 }
 

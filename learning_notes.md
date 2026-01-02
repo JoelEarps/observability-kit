@@ -34,6 +34,22 @@ Application State
 Counters
 Gauges
 
-
 ## Rust notes
+
+release Please
+
+Prometheus
+
+Counters
+Histograms
+Labels and families
+
+Open telemetry
+
+Release please
+
+
+rlib file
+
+Measuring binary size
 

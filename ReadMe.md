@@ -220,8 +220,8 @@ observability-kit = { version = "0.1", features = ["full"] }
 ## Running the Example
 
 ```bash
-# Run the standalone server
-cargo run
+# Run the standalone server example
+cargo run --example standalone-prometheus --features "prometheus standalone"
 
 # In another terminal:
 curl http://127.0.0.1:9090/metrics

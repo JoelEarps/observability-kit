@@ -1,4 +1,4 @@
-name: Build and Test
+name: Reusable Workflow - Build and Test the library
 
 on:
   workflow_call:
@@ -8,7 +8,7 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # Build job - ensures the code compiles
+  # Build job - ensures the code compiles on all supported platforms
   build:
     name: Build
     runs-on: ${{ matrix.os }}
@@ -86,7 +86,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-
 
-      - name: Run tests (features: ${{ matrix.features }})
+      - name: Run tests for features
         run: cargo test --verbose --features "${{ matrix.features }}"
 
       - name: Run tests (all features, release mode)

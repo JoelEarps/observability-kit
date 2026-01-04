@@ -2,6 +2,11 @@
 //!
 //! This demonstrates how to use the library in standalone mode,
 //! suitable for sidecar deployments or embedded metrics servers.
+//!
+//! Run with:
+//! ```bash
+//! cargo run --example standalone-prometheus --features "prometheus standalone"
+//! ```
 
 use observability_kit::prelude::*;
 
@@ -60,8 +65,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(not(all(feature = "prometheus", feature = "standalone")))]
     {
         println!("ℹ️  Required features not enabled.");
-        println!("   Run with: cargo run --features \"prometheus standalone\"");
+        println!("   Run with: cargo run --example standalone-prometheus --features \"prometheus standalone\"");
     }
 
     Ok(())
 }
+

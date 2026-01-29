@@ -22,6 +22,26 @@ pub enum DeserializeError {
     /// Backend error during metric registration.
     #[error("Backend registration error: {0}")]
     BackendError(String),
+
+    /// Invalid file path.
+    #[error("Invalid file path: {0}")]
+    InvalidFilePath(String),
+
+    /// Unsupported file type.
+    #[error("Unsupported file type: {0}")]
+    UnsupportedFileType(String),
+
+    /// Path contains or is a symlink; symlinks are not allowed.
+    #[error("Symlinks are not allowed: {0}")]
+    SymlinkNotAllowed(String),
+
+    /// Path is outside allowed directories (e.g. XDG config, current dir).
+    #[error("Path outside allowed directory: {0}")]
+    PathOutsideAllowedDirectory(String),
+
+    /// Format requires a feature that is not enabled (e.g. enable json-config to load JSON).
+    #[error("Feature not enabled: {0}")]
+    FeatureNotEnabled(String),
 }
 
 // Helper trait to convert backend errors to DeserializeError

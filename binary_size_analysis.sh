@@ -77,14 +77,13 @@ for item in "${FEATURES[@]}"; do
     cargo clean --quiet
     
     if has_standalone "$features"; then
-        # Build binary (includes standalone)
+        # Build example binary (crate has no default binary; standalone example uses standalone feature)
         if [ "$features" = "full" ]; then
-            cargo build --release --features "$features" --quiet 2>/dev/null
-            size_file="target/release/observability-kit"
+            cargo build --release --example standalone-prometheus --features "$features" --quiet 2>/dev/null
         else
-            cargo build --release --no-default-features --features "$features" --quiet 2>/dev/null
-            size_file="target/release/observability-kit"
+            cargo build --release --example standalone-prometheus --no-default-features --features "$features" --quiet 2>/dev/null
         fi
+        size_file="target/release/examples/standalone_prometheus"
         size_type="binary"
     else
         # Build library only (no standalone, so binary won't compile)

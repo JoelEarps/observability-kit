@@ -162,6 +162,22 @@ mod tests {
 }
 ```
 
+## Config file path handling (JSON/YAML)
+
+When using `load_file`, `validate_file_path`, `load_json_file`, or `load_yaml_file` (with the `json-config` / `yaml-config` features), path handling is **restricted for security**:
+
+- **Allowed directories** — The path must resolve to a file under one of:
+  - `$XDG_CONFIG_HOME` (or `$HOME/.config` if unset)
+  - Current working directory
+  - An extra base you pass, e.g. `load_file("metrics.json", Some(project_root))`
+- **No symlinks** — The path and none of its ancestors may be symlinks.
+- **Supported extensions** — Only `.json`, `.yaml`, and `.yml` are accepted.
+- **File must exist** — The path must point to an existing regular file (not a directory).
+
+Use **`load_file(path, extra_base)`** to validate and then deserialize in one call (returns `RegistryConfig` when the matching feature is enabled). Use **`validate_file_path(path, extra_base)`** if you only need the validated path.
+
+*Note:* Do not load config from untrusted paths; no resource limits (file size, metric count) are enforced.
+
 ## Histogram Presets
 
 Pre-configured bucket sets for common use cases:

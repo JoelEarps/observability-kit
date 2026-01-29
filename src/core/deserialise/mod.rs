@@ -8,9 +8,9 @@ pub mod config;
 
 pub mod errors;
 #[cfg(any(feature = "json-config", feature = "yaml-config"))]
-pub mod registry;
-#[cfg(any(feature = "json-config", feature = "yaml-config"))]
 pub mod loaders;
+#[cfg(any(feature = "json-config", feature = "yaml-config"))]
+pub mod registry;
 
 #[cfg(any(feature = "json-config", feature = "yaml-config"))]
 pub use config::{MetricConfig, RegistryConfig};

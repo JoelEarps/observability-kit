@@ -42,6 +42,10 @@ pub enum DeserializeError {
     /// Format requires a feature that is not enabled (e.g. enable json-config to load JSON).
     #[error("Feature not enabled: {0}")]
     FeatureNotEnabled(String),
+
+    /// Duplicate metric name (same type) in config.
+    #[error("Duplicate metric name: {0}")]
+    DuplicateMetricName(String),
 }
 
 // Helper trait to convert backend errors to DeserializeError

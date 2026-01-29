@@ -14,18 +14,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     #[cfg(all(feature = "prometheus", feature = "json-config"))]
     {
-        use observability_kit::backends::prometheus::PrometheusBackend;
+        use observability_kit::backends::prometheus::prometheus_backend::PrometheusBackend;
         use observability_kit::prelude::{
-            ConfiguredRegistry, DeserializeError, load_json_file, load_json_str,
+            load_json_file, load_json_str, ConfiguredRegistry, DeserializeError,
         };
         // Option 1: Load from a file
         println!("📄 Loading configuration from rough_input.json...");
         let config = load_json_file("rough_input.json")?;
         let configured = ConfiguredRegistry::<PrometheusBackend>::from_config(config)?;
 
-        println!("✅ Successfully loaded {} counters", configured.counters.len());
+        println!(
+            "✅ Successfully loaded {} counters",
+            configured.counters.len()
+        );
         println!("✅ Successfully loaded {} gauges", configured.gauges.len());
-        println!("✅ Successfully loaded {} histograms\n", configured.histograms.len());
+        println!(
+            "✅ Successfully loaded {} histograms\n",
+            configured.histograms.len()
+        );
 
         // Access and use metrics by name
         if let Some(counter) = configured.counters.get("M_title") {
@@ -69,7 +75,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let configured2 = ConfiguredRegistry::<PrometheusBackend>::from_config(config2)?;
 
         println!("✅ Successfully loaded configuration from string");
-        println!("   Counters: {}, Gauges: {}, Histograms: {}\n",
+        println!(
+            "   Counters: {}, Gauges: {}, Histograms: {}\n",
             configured2.counters.len(),
             configured2.gauges.len(),
             configured2.histograms.len()
@@ -92,9 +99,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Render the metrics
         println!("📊 Rendered metrics:");
-        let output = configured2.registry.render()
+        let output = configured2
+            .registry
+            .render()
             .map_err(|e| DeserializeError::BackendError(e.to_string()))?;
-        let output_str = output.as_str()
+        let output_str = output
+            .as_str()
             .map_err(|e| DeserializeError::BackendError(format!("UTF-8 error: {}", e)))?;
         println!("{}", output_str);
     }

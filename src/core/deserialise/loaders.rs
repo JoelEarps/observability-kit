@@ -11,9 +11,9 @@ pub enum SupportedFileTypes {
     Yaml(PathBuf),
 }
 
-use crate::core::deserialise::errors::DeserializeError;
 #[cfg(any(feature = "json-config", feature = "yaml-config"))]
 use crate::core::deserialise::config::RegistryConfig;
+use crate::core::deserialise::errors::DeserializeError;
 #[cfg(any(feature = "json-config", feature = "yaml-config"))]
 use std::fs::File;
 #[cfg(any(feature = "json-config", feature = "yaml-config"))]
@@ -31,7 +31,9 @@ use std::path::{Path, PathBuf};
 /// let config = load_json_file("metrics.json")?;
 /// ```
 #[cfg(feature = "json-config")]
-pub fn load_json_file(path: impl AsRef<std::path::Path>) -> Result<RegistryConfig, DeserializeError> {
+pub fn load_json_file(
+    path: impl AsRef<std::path::Path>,
+) -> Result<RegistryConfig, DeserializeError> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     let config: RegistryConfig = serde_json::from_reader(reader)?;
@@ -64,7 +66,9 @@ pub fn load_json_str(json: &str) -> Result<RegistryConfig, DeserializeError> {
 /// let config = load_yaml_file("metrics.yaml")?;
 /// ```
 #[cfg(feature = "yaml-config")]
-pub fn load_yaml_file(path: impl AsRef<std::path::Path>) -> Result<RegistryConfig, DeserializeError> {
+pub fn load_yaml_file(
+    path: impl AsRef<std::path::Path>,
+) -> Result<RegistryConfig, DeserializeError> {
     let file = File::open(path)?;
     let reader = BufReader::new(file);
     let config: RegistryConfig = serde_yaml::from_reader(reader)?;
@@ -95,10 +99,8 @@ fn allowed_base_directories(extra_base: Option<&Path>) -> Result<Vec<PathBuf>, D
     let mut bases = Vec::new();
 
     // $XDG_CONFIG_HOME or ~/.config on Unix (first that is set)
-    let xdg_config_candidates: &[(&str, Option<&str>)] = &[
-        ("XDG_CONFIG_HOME", None),
-        ("HOME", Some(".config")),
-    ];
+    let xdg_config_candidates: &[(&str, Option<&str>)] =
+        &[("XDG_CONFIG_HOME", None), ("HOME", Some(".config"))];
     for (var, suffix) in xdg_config_candidates {
         if let Some(val) = std::env::var_os(var) {
             let path = PathBuf::from(val);
@@ -212,10 +214,10 @@ pub fn load_file(
 ) -> Result<RegistryConfig, DeserializeError> {
     let validated = validate_file_path(path, extra_base)?;
     match validated {
-        SupportedFileTypes::Json(p) => {
+        SupportedFileTypes::Json(path) => {
             #[cfg(feature = "json-config")]
             {
-                load_json_file(p)
+                load_json_file(path)
             }
             #[cfg(not(feature = "json-config"))]
             {
@@ -224,10 +226,10 @@ pub fn load_file(
                 ))
             }
         }
-        SupportedFileTypes::Yaml(p) => {
+        SupportedFileTypes::Yaml(path) => {
             #[cfg(feature = "yaml-config")]
             {
-                load_yaml_file(p)
+                load_yaml_file(path)
             }
             #[cfg(not(feature = "yaml-config"))]
             {

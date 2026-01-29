@@ -4,7 +4,7 @@
 
 #[cfg(feature = "prometheus")]
 mod prometheus_tests {
-    use observability_kit::backends::prometheus::{counter, gauge};
+    use observability_kit::backends::prometheus::prometheus_backend::{counter, gauge};
 
     #[test]
     fn test_counter_basic_operations() {

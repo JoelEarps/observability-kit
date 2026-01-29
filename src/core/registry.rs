@@ -121,11 +121,7 @@ impl<B: MetricBackend> ObservabilityRegistry<B> {
         name: impl Into<String>,
         help: impl Into<String>,
     ) -> Result<Metric<B::Histogram>, B::Error> {
-        self.histogram_with_buckets(
-            name,
-            help,
-            DEFAULT_LATENCY_BUCKETS.to_vec(),
-        )
+        self.histogram_with_buckets(name, help, DEFAULT_LATENCY_BUCKETS.to_vec())
     }
 
     /// Create and register a histogram with custom buckets.

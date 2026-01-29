@@ -79,7 +79,7 @@ pub mod prelude {
     pub use crate::core::metrics::{CounterTrait, GaugeTrait, HistogramTrait, Metric};
 
     #[cfg(feature = "prometheus")]
-    pub use crate::backends::prometheus::{
+    pub use crate::backends::prometheus::prometheus_backend::{
         // Basic metrics
         counter,
         gauge,

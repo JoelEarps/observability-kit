@@ -6,7 +6,8 @@
 pub mod metrics;
 pub mod registry;
 pub mod renderer;
+pub mod deserialise;
 
 pub use metrics::{CounterTrait, GaugeTrait, HistogramTrait, Metric};
-pub use registry::{MetricBackend, ObservabilityRegistry};
+pub use registry::{MetricBackend, ObservabilityRegistry, DEFAULT_LATENCY_BUCKETS};
 pub use renderer::{MetricsRenderer, RenderedMetrics};

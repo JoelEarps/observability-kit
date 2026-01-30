@@ -79,7 +79,7 @@ pub mod prelude {
     pub use crate::core::metrics::{CounterTrait, GaugeTrait, HistogramTrait, Metric};
 
     #[cfg(feature = "prometheus")]
-    pub use crate::backends::prometheus::{
+    pub use crate::backends::prometheus::prometheus_backend::{
         // Basic metrics
         counter,
         gauge,
@@ -118,4 +118,16 @@ pub mod prelude {
 
     #[cfg(feature = "standalone")]
     pub use crate::http::standalone::{ServerConfig, StandaloneServer, StandaloneServerBuilder};
+
+    // Deserialization support (feature-gated)
+    #[cfg(any(feature = "json-config", feature = "yaml-config"))]
+    pub use crate::core::deserialise::{
+        ConfiguredRegistry, DeserializeError, MetricConfig, RegistryConfig,
+    };
+
+    #[cfg(feature = "json-config")]
+    pub use crate::core::deserialise::{load_json_file, load_json_str};
+
+    #[cfg(feature = "yaml-config")]
+    pub use crate::core::deserialise::{load_yaml_file, load_yaml_str};
 }

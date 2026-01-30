@@ -162,6 +162,40 @@ mod tests {
 }
 ```
 
+## Config file path handling (JSON/YAML)
+
+When using `load_file`, `validate_file_path`, `load_json_file`, or `load_yaml_file` (with the `json-config` / `yaml-config` features), path handling is **restricted for security**:
+
+- **Allowed directories** — The path must resolve to a file under one of:
+  - `$XDG_CONFIG_HOME` (or `$HOME/.config` if unset)
+  - Current working directory
+  - An extra base you pass, e.g. `load_file("metrics.json", Some(project_root))`
+- **No symlinks** — The path and none of its ancestors may be symlinks.
+- **Supported extensions** — Only `.json`, `.yaml`, and `.yml` are accepted.
+- **File must exist** — The path must point to an existing regular file (not a directory).
+
+Use **`load_file(path, extra_base)`** to validate and then deserialize in one call (returns `RegistryConfig` when the matching feature is enabled). Use **`validate_file_path(path, extra_base)`** if you only need the validated path.
+
+*Note:* Do not load config from untrusted paths; no resource limits (file size, metric count) are enforced.
+
+## Metric names and duplicates (need to know)
+
+### Metric names (Prometheus backend)
+
+When using the Prometheus backend, metric names are **validated at registration**. Names must follow [Prometheus rules](https://prometheus.io/docs/concepts/data_model/#metric-names-and-labels):
+
+- **Pattern:** `[a-zA-Z_][a-zA-Z0-9_]*` — start with a letter or underscore; after that, only letters, digits, and underscores.
+- **Non-empty** — empty names are rejected.
+- **Not allowed:** colons (`:`), hyphens (`-`), dots (`.`), or any other characters. Digits are allowed only after the first character.
+
+Invalid names (e.g. `my-metric`, `my.metric`, `name_with:colon`, `123bad`) cause registration to return `PrometheusError::InvalidNamingConvention`. Use valid names such as `http_requests_total`, `request_duration_seconds`, `_private_metric`.
+
+### Duplicate names and number of metrics
+
+- **Same type, same name** — Registering two metrics of the **same type** (e.g. two counters) with the **same name** is not allowed. It returns `DuplicateMetricName` (deserialised config) or a backend error. Each metric name must be unique within its type.
+- **Same name, different types** — One counter, one gauge, and one histogram can all share the same name (e.g. `metric`). That is allowed.
+- **No hard limit** — The library does not enforce a maximum number of metrics. Very large registries may affect memory and scrape size; keep cardinality in mind for Prometheus.
+
 ## Histogram Presets
 
 Pre-configured bucket sets for common use cases:

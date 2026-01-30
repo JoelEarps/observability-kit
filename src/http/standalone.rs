@@ -7,7 +7,7 @@
 //!
 //! ```ignore
 //! use observability_kit::http::standalone::StandaloneServer;
-//! use observability_kit::backends::prometheus::PrometheusBackend;
+//! use observability_kit::backends::prometheus::prometheus_backend::PrometheusBackend;
 //!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -300,7 +300,7 @@ mod tests {
     #[cfg(feature = "prometheus")]
     #[test]
     fn test_builder() {
-        use crate::backends::prometheus::PrometheusBackend;
+        use crate::backends::prometheus::prometheus_backend::PrometheusBackend;
 
         let server = StandaloneServer::<PrometheusBackend>::builder()
             .port(3000)

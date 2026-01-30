@@ -102,6 +102,81 @@ impl HistogramTrait for Histogram {
 pub enum PrometheusError {
     #[error("Failed to register metric: {0}")]
     RegistrationError(String),
+
+    /// Metric name does not match Prometheus rules: `[a-zA-Z_:][a-zA-Z0-9_:]*`
+    #[error("Invalid metric name (Prometheus): {0}")]
+    InvalidNamingConvention(String),
+
+    /// Histogram buckets invalid (e.g. not finite, negative, or unsorted).
+    #[error("Invalid histogram buckets: {0}")]
+    InvalidHistogramBuckets(String),
+}
+
+/// First character of a Prometheus metric name: letter or underscore only.
+fn is_valid_first_char(c: char) -> bool {
+    c.is_ascii_alphabetic() || c == '_'
+}
+
+/// Subsequent characters: letter, digit, or underscore.
+fn is_valid_subsequent_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
+/// Prometheus metric names must match `[a-zA-Z_][a-zA-Z0-9_]*` (non-empty).
+fn validate_prometheus_metric_name(name: &str) -> Result<(), PrometheusError> {
+    if name.is_empty() {
+        return Err(PrometheusError::InvalidNamingConvention(
+            "metric name cannot be empty".to_string(),
+        ));
+    }
+    // Chars is a wrapper around the iterator of a string slice therefore we can use any iterator methods on it
+    let mut chars = name.chars();
+    let first = chars.next().ok_or_else(|| {
+        PrometheusError::InvalidNamingConvention("metric name cannot be empty".to_string())
+    })?;
+    if !is_valid_first_char(first) {
+        return Err(PrometheusError::InvalidNamingConvention(format!(
+            "metric name must start with [a-zA-Z_], got {:?}",
+            first
+        )));
+    }
+    for c in chars {
+        if !is_valid_subsequent_char(c) {
+            return Err(PrometheusError::InvalidNamingConvention(format!(
+                "metric name may only contain [a-zA-Z0-9_], got invalid char {:?} in {:?}",
+                c,
+                name
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// Histogram buckets must be finite, non-negative, and strictly increasing.
+fn validate_histogram_buckets(buckets: &[f64]) -> Result<(), PrometheusError> {
+    for (i, &b) in buckets.iter().enumerate() {
+        if !b.is_finite() {
+            return Err(PrometheusError::InvalidHistogramBuckets(format!(
+                "bucket at index {} is not finite (NaN or Infinity): {}",
+                i, b
+            )));
+        }
+        if b < 0.0 {
+            return Err(PrometheusError::InvalidHistogramBuckets(format!(
+                "bucket at index {} is negative: {}",
+                i, b
+            )));
+        }
+        if i > 0 && b <= buckets[i - 1] {
+            return Err(PrometheusError::InvalidHistogramBuckets(format!(
+                "buckets must be strictly increasing; index {} ({}) <= previous ({})",
+                i,
+                b,
+                buckets[i - 1]
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Prometheus backend marker type.
@@ -126,6 +201,7 @@ impl MetricBackend for PrometheusBackend {
         name: &str,
         help: &str,
     ) -> Result<Self::Counter, Self::Error> {
+        validate_prometheus_metric_name(name)?;
         let counter = Counter::default();
         registry.register(name, help, counter.clone());
         Ok(counter)
@@ -136,6 +212,7 @@ impl MetricBackend for PrometheusBackend {
         name: &str,
         help: &str,
     ) -> Result<Self::Gauge, Self::Error> {
+        validate_prometheus_metric_name(name)?;
         let gauge = Gauge::default();
         registry.register(name, help, gauge.clone());
         Ok(gauge)
@@ -147,6 +224,8 @@ impl MetricBackend for PrometheusBackend {
         help: &str,
         buckets: Vec<f64>,
     ) -> Result<Self::Histogram, Self::Error> {
+        validate_prometheus_metric_name(name)?;
+        validate_histogram_buckets(&buckets)?;
         let histogram = Histogram::new(buckets);
         registry.register(name, help, histogram.clone());
         Ok(histogram)
@@ -653,5 +732,171 @@ mod tests {
             })
             .get();
         assert_eq!(primary, 10);
+    }
+
+    #[test]
+    fn validation_empty_metric_name_rejected() {
+        let mut registry = PrometheusRegistry::new();
+        let result = registry.counter("", "help");
+        assert!(
+            matches!(result, Err(PrometheusError::InvalidNamingConvention(_))),
+            "expected InvalidNamingConvention, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn validation_metric_name_starting_with_digit_rejected() {
+        let mut registry = PrometheusRegistry::new();
+        let result = registry.counter("123bad", "help");
+        assert!(
+            matches!(result, Err(PrometheusError::InvalidNamingConvention(_))),
+            "expected InvalidNamingConvention, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn validation_metric_name_with_hyphen_rejected() {
+        let mut registry = PrometheusRegistry::new();
+        let result = registry.counter("my-metric", "help");
+        assert!(
+            matches!(result, Err(PrometheusError::InvalidNamingConvention(_))),
+            "expected InvalidNamingConvention, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn validation_metric_name_with_colon_rejected() {
+        let mut registry = PrometheusRegistry::new();
+        let result = registry.counter("name_with:colon", "help");
+        assert!(
+            matches!(result, Err(PrometheusError::InvalidNamingConvention(_))),
+            "expected InvalidNamingConvention (colons not allowed), got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn validation_valid_metric_names_accepted() {
+        let mut registry = PrometheusRegistry::new();
+        assert!(registry.counter("http_requests_total", "help").is_ok());
+        assert!(registry.gauge("_private_metric", "help").is_ok());
+        assert!(registry.counter("request_count_42", "help").is_ok());
+    }
+
+    #[test]
+    fn validation_single_char_valid_names_accepted() {
+        let mut registry = PrometheusRegistry::new();
+        assert!(registry.counter("a", "help").is_ok());
+        assert!(registry.gauge("_", "help").is_ok());
+        assert!(registry.counter("Z", "help").is_ok());
+    }
+
+    #[test]
+    fn validation_metric_name_with_dot_rejected() {
+        let mut registry = PrometheusRegistry::new();
+        let result = registry.counter("my.metric", "help");
+        assert!(
+            matches!(result, Err(PrometheusError::InvalidNamingConvention(_))),
+            "expected InvalidNamingConvention (dots not allowed), got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn validation_gauge_invalid_name_rejected() {
+        let mut registry = PrometheusRegistry::new();
+        let result = registry.gauge("bad-name", "help");
+        assert!(
+            matches!(result, Err(PrometheusError::InvalidNamingConvention(_))),
+            "expected InvalidNamingConvention for gauge, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn validation_histogram_invalid_name_rejected() {
+        let mut registry = PrometheusRegistry::new();
+        let result = registry.histogram_with_buckets("bad.name", "help", vec![1.0]);
+        assert!(
+            matches!(result, Err(PrometheusError::InvalidNamingConvention(_))),
+            "expected InvalidNamingConvention for histogram, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn validation_histogram_buckets_empty_accepted() {
+        let mut registry = PrometheusRegistry::new();
+        let result = registry.histogram_with_buckets("h", "help", vec![]);
+        assert!(
+            result.is_ok(),
+            "empty buckets should be accepted: {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn validation_histogram_buckets_negative_rejected() {
+        let mut registry = PrometheusRegistry::new();
+        let result = registry.histogram_with_buckets("h", "help", vec![-1.0, 1.0]);
+        assert!(
+            matches!(result, Err(PrometheusError::InvalidHistogramBuckets(_))),
+            "expected InvalidHistogramBuckets, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn validation_histogram_buckets_nan_rejected() {
+        let mut registry = PrometheusRegistry::new();
+        let result = registry.histogram_with_buckets("h", "help", vec![f64::NAN, 1.0]);
+        assert!(
+            matches!(result, Err(PrometheusError::InvalidHistogramBuckets(_))),
+            "expected InvalidHistogramBuckets, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn validation_histogram_buckets_infinity_rejected() {
+        let mut registry = PrometheusRegistry::new();
+        let result = registry.histogram_with_buckets("h", "help", vec![1.0, f64::INFINITY]);
+        assert!(
+            matches!(result, Err(PrometheusError::InvalidHistogramBuckets(_))),
+            "expected InvalidHistogramBuckets, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn validation_histogram_buckets_unsorted_rejected() {
+        let mut registry = PrometheusRegistry::new();
+        let result = registry.histogram_with_buckets("h", "help", vec![1.0, 0.5, 2.0]);
+        assert!(
+            matches!(result, Err(PrometheusError::InvalidHistogramBuckets(_))),
+            "expected InvalidHistogramBuckets, got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn validation_histogram_buckets_duplicate_rejected() {
+        let mut registry = PrometheusRegistry::new();
+        let result = registry.histogram_with_buckets("h", "help", vec![0.5, 0.5, 1.0]);
+        assert!(
+            matches!(result, Err(PrometheusError::InvalidHistogramBuckets(_))),
+            "expected InvalidHistogramBuckets (strictly increasing), got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn validation_histogram_buckets_valid_accepted() {
+        let mut registry = PrometheusRegistry::new();
+        let result = registry.histogram_with_buckets("latency", "help", vec![0.1, 0.5, 1.0]);
+        assert!(result.is_ok(), "valid buckets should be accepted: {:?}", result);
     }
 }

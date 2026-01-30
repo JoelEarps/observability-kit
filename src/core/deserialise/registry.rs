@@ -342,9 +342,9 @@ mod tests {
         let result = ConfiguredRegistry::<PrometheusBackend>::from_config(config);
         assert!(result.is_ok());
         let configured = result.unwrap();
-        assert!(configured.counters.get("metric").is_some());
-        assert!(configured.gauges.get("metric").is_some());
-        assert!(configured.histograms.get("metric").is_some());
+        assert!(configured.counters.contains_key("metric"));
+        assert!(configured.gauges.contains_key("metric"));
+        assert!(configured.histograms.contains_key("metric"));
     }
 
     #[test]
